@@ -88,7 +88,7 @@
         records.push(defaultprofile);
       }
       client.profilefunctions.loadData(records); // do a conversion if needed
-      mongorecords = client.profilefunctions.data;
+      mongorecords = _.cloneDeep(client.profilefunctions.data);
       // create new profile to be edited from last record
       if (mongorecords.length) {
         _.each(mongorecords, function eachMongoProfile (mongoprofile) {
@@ -327,6 +327,8 @@
     GUIToObject();
 
     var newname = $('#pe_profile_name').val();
+    if (!isNaN(newname)) newname = 'Profile' + newname;
+    
     if (currentprofile !== newname) {
       // rename if already exists
       while (record.store[newname]) {
@@ -628,11 +630,11 @@
   }
 
   function toTimeString(minfrommidnight) {
-    return moment().startOf('day').add(minfrommidnight,'minutes').format('HH:mm');
+    return moment.utc().startOf('day').add(minfrommidnight,'minutes').format('HH:mm'); // using utc to avoid daylight saving offset
   }
 
   function toDisplayTime (minfrommidnight) {
-    var time = moment().startOf('day').add(minfrommidnight,'minutes');
+    var time = moment.utc().startOf('day').add(minfrommidnight,'minutes'); // using utc to avoid daylight saving offset
     return client.settings.timeFormat === 24 ? time.format('HH:mm') : time.format('h:mm A');
   }
 

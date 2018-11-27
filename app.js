@@ -1,6 +1,6 @@
 'use strict';
 
-var _ = require('lodash');
+var _get = require('lodash/get');
 var express = require('express');
 var compression = require('compression');
 var bodyParser = require('body-parser');
@@ -14,6 +14,24 @@ function create(env, ctx) {
     var appInfo = env.name + ' ' + env.version;
     app.set('title', appInfo);
     app.enable('trust proxy'); // Allows req.secure test on heroku https connections.
+    if (process.env.INSECURE_USE_HTTP !== 'true') {
+        app.use((req, res, next) => {
+        if (req.header('x-forwarded-proto') !== 'https')
+            res.redirect(`https://${req.header('host')}${req.url}`)
+        else
+            next()
+        })
+        if (process.env.SECURE_HTTP_HEADERS == 'true') {
+            const helmet = require('helmet')
+            app.use(helmet({
+                hsts: {
+                    maxAge: 31536000,
+                    includeSubDomains: true,
+                    preload: true
+                }
+            }))
+        }
+     }
 
     app.set('view engine', 'ejs');
     // this allows you to render .html files as templates in addition to .ejs
@@ -24,12 +42,12 @@ function create(env, ctx) {
     app.locals.cachebuster = fs.readFileSync(process.cwd() + '/tmp/cacheBusterToken').toString().trim();
 
     if (ctx.bootErrors && ctx.bootErrors.length > 0) {
-        app.get('*', require('./lib/booterror')(ctx));
+        app.get('*', require('./lib/server/booterror')(ctx));
         return app;
     }
 
     if (env.settings.isEnabled('cors')) {
-        var allowOrigin = _.get(env, 'extendedSettings.cors.allowOrigin') || '*';
+        var allowOrigin = _get(env, 'extendedSettings.cors.allowOrigin') || '*';
         console.info('Enabled CORS, allow-origin:', allowOrigin);
         app.use(function allowCrossDomain(req, res, next) {
             res.header('Access-Control-Allow-Origin', allowOrigin);
@@ -101,9 +119,9 @@ function create(env, ctx) {
     // pebble data
     app.get('/pebble', ctx.pebble);
 
-    // expose swagger.yaml
-    app.get('/swagger.yaml', function(req, res) {
-        res.sendFile(__dirname + '/swagger.yaml');
+    // expose swagger.json
+    app.get('/swagger.json', function(req, res) {
+        res.sendFile(__dirname + '/swagger.json');
     });
 
 /*
@@ -140,6 +158,13 @@ function create(env, ctx) {
 
     // serve the static content
     app.use(staticFiles);
+
+    var swaggerFiles = express.static(env.swagger_files, {
+        maxAge: maxAge
+    });
+
+    // serve the static content
+    app.use('/swagger-ui-dist', swaggerFiles);
 
     var tmpFiles = express.static('tmp', {
         maxAge: maxAge
